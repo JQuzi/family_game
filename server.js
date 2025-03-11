@@ -1,121 +1,52 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const ChatModule = require('./src/modules/chat/chatModule');
+const AdminModule = require('./src/modules/admin/adminModule');
+const ReferralModule = require('./src/modules/game/referralModule');
+const TableModule = require('./src/modules/game/tableModule');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const chatModule = new ChatModule(io);
+const adminModule = new AdminModule(io);
+const referralModule = new ReferralModule();
+const tableModule = new TableModule();
 
 app.use(express.static('public')); // Раздаём файлы из папки public
 
-// Добавляем хранение истории чата для каждого стола
-let chatHistory = {};
-
-// Структура данных для хранения столов и игроков
-let tables = {};
-
-// Инициализируем историю чата для первого стола
-chatHistory['table1'] = [];
-
-// Хранилище реферальных ссылок
-// Формат: { referralCode: { sonId, sonName, used, remainingUses } }
-let referralLinks = new Map();
-
-// Добавляем генератор случайных имен для администратора
-const adminNames = [
-    'Михаил', 'Александр', 'Николай', 'Владимир', 'Сергей', 'Андрей', 'Дмитрий', 'Иван',
-    'Петр', 'Василий', 'Григорий', 'Алексей', 'Федор', 'Борис', 'Константин', 'Георгий'
-];
-
-function getRandomAdminName() {
-    return adminNames[Math.floor(Math.random() * adminNames.length)];
-}
-
-// Добавляем статистику
+// Статистика игры
 let gameStats = {
     closedTables: 0,
-    totalRegisteredPlayers: new Set(), // Храним уникальные ID игроков
-    activeGames: new Map() // Храним информацию об активных столах
+    totalRegisteredPlayers: new Set(),
+    activeGames: new Map()
 };
-
-// Добавляем админские данные
-const ADMIN_CREDENTIALS = {
-    login: 'admin',
-    password: 'admin'
-};
-
-// Добавляем систему логирования
-let adminLogs = [];
-
-function addAdminLog(message, type = 'info') {
-    const log = {
-        message,
-        type,
-        timestamp: new Date().toLocaleTimeString()
-    };
-    adminLogs.push(log);
-    // Отправляем лог всем админам
-    const adminSockets = Array.from(io.sockets.sockets.values())
-        .filter(socket => socket.isAdmin);
-    adminSockets.forEach(socket => {
-        socket.emit('adminLog', log);
-    });
-}
 
 io.on('connection', (socket) => {
     console.log(`Игрок ${socket.id} подключился`);
 
-    // Добавляем обработчик сообщений чата
+    // Обработчик сообщений чата
     socket.on('chatMessage', (message) => {
-        const player = findPlayerBySocketId(socket.id);
-        const table = findTableByPlayerId(socket.id);
+        const player = tableModule.findPlayerBySocketId(socket.id);
+        const table = tableModule.findTableByPlayerId(socket.id);
         
         if (player && table) {
-            // Убедимся, что история чата существует для данного стола
-            if (!chatHistory[table.id]) {
-                chatHistory[table.id] = [];
-            }
-
-            const chatMessage = {
-                sender: player.name,
-                role: player.role,
-                message: message,
-                timestamp: new Date().toLocaleTimeString()
-            };
-            
-            // Сохраняем сообщение в историю
-            chatHistory[table.id].push(chatMessage);
-            
-            // Отправляем сообщение всем в комнате, включая админов
-            io.to(table.id).emit('chatMessage', chatMessage);
+            chatModule.handleMessage(socket, table.id, player, message);
         }
     });
 
-    // Добавляем обработчик входа админа
+    // Обработчик входа админа
     socket.on('adminLogin', (data) => {
-        if (data.login === ADMIN_CREDENTIALS.login && data.password === ADMIN_CREDENTIALS.password) {
+        if (adminModule.validateCredentials(data.login, data.password)) {
             socket.isAdmin = true;
             socket.emit('adminLoginResponse', { 
                 success: true,
-                stats: getGameStats(),
-                logs: adminLogs // Отправляем историю логов при входе
+                stats: tableModule.getGameStats(),
+                logs: adminModule.getLogs()
             });
             
-            // Отправляем информацию о всех столах
-            const tablesInfo = Object.entries(tables).map(([id, table]) => ({
-                id,
-                playersCount: table.players.length,
-                status: table.status,
-                hasAdminGrandfather: table.players.some(p => p.role === 'Дед' && p.isAdmin),
-                players: table.players.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    role: p.role,
-                    isAdmin: p.isAdmin,
-                    giftSent: p.giftSent
-                }))
-            }));
-            socket.emit('adminTablesUpdate', tablesInfo);
+            socket.emit('adminTablesUpdate', tableModule.getTablesInfo());
         } else {
             socket.emit('adminLoginResponse', { 
                 success: false, 
@@ -124,14 +55,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Добавляем обработчик создания первого стола
+    // Обновленный обработчик создания первого стола
     socket.on('createFirstTable', () => {
         if (!socket.isAdmin) return;
         
         const tableId = 'table1';
-        if (Object.keys(tables).length === 0) {
-            const table = createNewTable(tableId);
-            const adminName = getRandomAdminName();
+        if (Object.keys(tableModule.getAllTables()).length === 0) {
+            const table = tableModule.createNewTable(tableId);
+            const adminName = adminModule.getRandomAdminName();
             console.log('Создание первого стола с админом-дедом:', adminName);
             
             const adminPlayer = {
@@ -142,13 +73,9 @@ io.on('connection', (socket) => {
                 giftSent: false
             };
             
-            table.players.push(adminPlayer);
+            tableModule.addPlayer(tableId, adminPlayer);
             socket.join(tableId);
             
-            // Добавляем стол в список столов
-            tables[tableId] = table;
-            
-            // Отправляем обновленную информацию
             socket.emit('adminTableJoined', {
                 table: {
                     id: table.id,
@@ -162,30 +89,13 @@ io.on('connection', (socket) => {
                     status: table.status,
                     hasAdminGrandfather: true
                 },
-                chatHistory: chatHistory[tableId] || []
+                chatHistory: chatModule.getTableHistory(tableId)
             });
             
-            // Обновляем информацию о столах для всех админов
-            const adminSockets = Array.from(io.sockets.sockets.values())
-                .filter(socket => socket.isAdmin);
-            
-            const tablesInfo = Object.entries(tables).map(([id, table]) => ({
-                id,
-                playersCount: table.players.length,
-                status: table.status,
-                hasAdminGrandfather: table.players.some(p => p.role === 'Дед' && p.isAdmin),
-                players: table.players.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    role: p.role,
-                    isAdmin: p.isAdmin,
-                    giftSent: p.giftSent
-                }))
-            }));
-            
+            const adminSockets = adminModule.getAdminSockets();
             adminSockets.forEach(socket => {
-                socket.emit('adminTablesUpdate', tablesInfo);
-                socket.emit('adminStatsUpdate', getGameStats());
+                socket.emit('adminTablesUpdate', tableModule.getTablesInfo());
+                socket.emit('adminStatsUpdate', tableModule.getGameStats());
             });
         }
     });
@@ -194,9 +104,8 @@ io.on('connection', (socket) => {
     socket.on('adminJoinTable', (tableId) => {
         if (!socket.isAdmin) return;
         
-        const table = tables[tableId];
+        const table = tableModule.getTable(tableId);
         if (table) {
-            // Отписываем админа от предыдущего стола, если он был подписан
             if (socket.currentAdminTable) {
                 socket.leave(socket.currentAdminTable);
             }
@@ -204,7 +113,6 @@ io.on('connection', (socket) => {
             socket.currentAdminTable = tableId;
             socket.join(tableId);
             
-            // Проверяем, является ли админ дедом на этом столе
             const isAdminGrandfather = table.players.some(p => p.role === 'Дед' && p.isAdmin);
             console.log('Админ присоединяется к столу:', { tableId, isAdminGrandfather });
             
@@ -221,7 +129,7 @@ io.on('connection', (socket) => {
                     status: table.status,
                     hasAdminGrandfather: isAdminGrandfather
                 },
-                chatHistory: chatHistory[tableId] || []
+                chatHistory: chatModule.getTableHistory(tableId)
             });
         }
     });
@@ -230,11 +138,10 @@ io.on('connection', (socket) => {
     socket.on('adminRemovePlayer', ({ tableId, playerId }) => {
         if (!socket.isAdmin) return;
         
-        const table = tables[tableId];
+        const table = tableModule.getTable(tableId);
         if (table) {
-            const playerIndex = table.players.findIndex(p => p.id === playerId);
-            if (playerIndex !== -1) {
-                const removedPlayer = table.players.splice(playerIndex, 1)[0];
+            const removedPlayer = tableModule.removePlayer(tableId, playerId);
+            if (removedPlayer) {
                 const playerSocket = io.sockets.sockets.get(playerId);
                 if (playerSocket) {
                     playerSocket.leave(tableId);
@@ -252,33 +159,24 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Админ генерирует реферальную ссылку
+    // Обработчик генерации реферальной ссылки админом
     socket.on('adminGenerateReferral', ({ tableId, sonId }) => {
         if (!socket.isAdmin) return;
         
-        const table = tables[tableId];
+        const table = tableModule.getTable(tableId);
         if (table) {
             const son = table.players.find(p => p.id === sonId && p.role === 'Сын');
             if (son) {
-                const referral = generateUniqueReferral();
-                referralLinks.set(referral, {
-                    sonId: son.id,
-                    sonName: son.name,
-                    remainingUses: 3, // Увеличиваем количество использований
-                    isAdminGenerated: true,
-                    tableId: tableId
-                });
+                const referral = referralModule.createReferral(son.id, son.name, tableId, true);
                 
-                addAdminLog(`Сгенерирована новая реферальная ссылка ${referral} для игрока ${son.name} (ID: ${son.id})`);
+                adminModule.addLog(`Сгенерирована новая реферальная ссылка ${referral} для игрока ${son.name} (ID: ${son.id})`);
                 
-                // Отправляем ссылку админу
                 socket.emit('adminReferralGenerated', {
                     referral,
                     sonName: son.name,
                     remainingUses: 3
                 });
                 
-                // Отправляем ссылку игроку
                 const playerSocket = io.sockets.sockets.get(sonId);
                 if (playerSocket) {
                     playerSocket.emit('referralGenerated', {
@@ -294,14 +192,12 @@ io.on('connection', (socket) => {
     socket.on('adminChatMessage', ({ tableId, message, asPlayer }) => {
         if (!socket.isAdmin) return;
         
-        const table = tables[tableId];
+        const table = tableModule.getTable(tableId);
         if (table) {
-            // Находим админа-деда в этом столе
             const adminGrandfather = table.players.find(p => p.role === 'Дед' && p.isAdmin);
             
             let chatMessage;
             if (asPlayer && adminGrandfather) {
-                // Отправляем сообщение от имени деда
                 chatMessage = {
                     sender: adminGrandfather.name,
                     role: 'Дед',
@@ -309,7 +205,6 @@ io.on('connection', (socket) => {
                     timestamp: new Date().toLocaleTimeString()
                 };
             } else {
-                // Отправляем сообщение от имени админа
                 chatMessage = {
                     sender: 'Администратор',
                     message: message,
@@ -318,21 +213,14 @@ io.on('connection', (socket) => {
                 };
             }
             
-            // Сохраняем сообщение в историю чата
-            if (!chatHistory[tableId]) {
-                chatHistory[tableId] = [];
-            }
-            chatHistory[tableId].push(chatMessage);
-            
-            // Отправляем сообщение всем в комнате
-            io.to(tableId).emit('chatMessage', chatMessage);
+            chatModule.handleMessage(socket, tableId, chatMessage.sender === 'Администратор' ? { name: chatMessage.sender, role: 'admin' } : adminGrandfather, message);
         }
     });
 
     // Обработка входа игрока
     socket.on('login', ({ name, referral }) => {
-        let tableId = findTableIdByReferral(referral) || Object.keys(tables)[0];
-        let table = tables[tableId];
+        let tableId = referralModule.findTableIdByReferral(referral) || Object.keys(tableModule.getAllTables())[0];
+        let table = tableModule.getTable(tableId);
         
         if (!table) {
             return socket.emit('loginResponse', {
@@ -343,7 +231,6 @@ io.on('connection', (socket) => {
 
         let role;
 
-        // Определение роли игрока
         if (table.players.length === 1 && table.players[0].role === 'Дед') {
             role = 'Отец';
         } else if (table.players.length <= 3) {
@@ -356,7 +243,7 @@ io.on('connection', (socket) => {
                 });
             }
             
-            const referralInfo = referralLinks.get(referral);
+            const referralInfo = referralModule.getReferralInfo(referral);
             if (!referralInfo) {
                 return socket.emit('loginResponse', {
                     success: false,
@@ -380,7 +267,7 @@ io.on('connection', (socket) => {
             }
 
             role = 'Дух';
-            referralInfo.remainingUses--;
+            referralModule.useReferral(referral);
         } else {
             return socket.emit('loginResponse', {
                 success: false,
@@ -393,24 +280,26 @@ io.on('connection', (socket) => {
             name,
             role,
             giftSent: false,
-            invitedBy: role === 'Дух' ? referralLinks.get(referral).sonId : null
+            invitedBy: role === 'Дух' ? referralModule.getReferralInfo(referral).sonId : null
         };
-        table.players.push(player);
+
+        tableModule.addPlayer(tableId, player);
         socket.join(tableId);
 
         socket.emit('loginResponse', { success: true, player, table });
         io.to(tableId).emit('tableUpdate', table);
         
-        // Отправляем обновления админам
         sendAdminUpdates();
     });
 
-    // Генерация реферальных ссылок для Сынов (2 ссылки на каждого Сына)
+    // Обработчик генерации реферальных ссылок для Сынов
     socket.on('generateReferral', () => {
-        const player = findPlayerBySocketId(socket.id);
+        const player = tableModule.findPlayerBySocketId(socket.id);
         if (player && player.role === 'Сын') {
-            // Проверяем, не сгенерировал ли уже этот Сын ссылки
-            const existingReferrals = Array.from(referralLinks.values())
+            const table = tableModule.findTableByPlayerId(socket.id);
+            if (!table) return;
+
+            const existingReferrals = Array.from(referralModule.referralLinks.values())
                 .filter(ref => ref.sonId === socket.id)
                 .length;
 
@@ -419,23 +308,18 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            const referral = generateUniqueReferral();
+            const referral = referralModule.createReferral(socket.id, player.name, table.id);
             console.log(`Сгенерирована реферальная ссылка: ${referral} для игрока ${player.name}`);
-            referralLinks.set(referral, {
-                sonId: socket.id,
-                sonName: player.name,
-                remainingUses: 1 // Каждая ссылка может быть использована только один раз
-            });
             socket.emit('referralGenerated', { link: referral });
         }
     });
 
     // Добавляем обработчик подтверждения подарка
     socket.on('confirmGift', ({ spiritId }) => {
-        const grandfather = findPlayerBySocketId(socket.id);
+        const grandfather = tableModule.findPlayerBySocketId(socket.id);
         if (!grandfather || grandfather.role !== 'Дед') return;
 
-        const table = findTableByPlayerId(socket.id);
+        const table = tableModule.findTableByPlayerId(socket.id);
         if (!table) return;
 
         // Находим духа, чей подарок подтверждаем
@@ -457,13 +341,7 @@ io.on('connection', (socket) => {
         };
         
         // Сохраняем сообщение в историю чата
-        if (!chatHistory[table.id]) {
-            chatHistory[table.id] = [];
-        }
-        chatHistory[table.id].push(chatMessage);
-        
-        // Отправляем сообщение всем в комнате
-        io.to(table.id).emit('chatMessage', chatMessage);
+        chatModule.handleMessage(socket, table.id, chatMessage.sender === 'Администратор' ? { name: chatMessage.sender, role: 'admin' } : grandfather, chatMessage.message);
 
         // Проверяем, все ли подарки подтверждены
         const spirits = table.players.filter(p => p.role === 'Дух');
@@ -477,8 +355,7 @@ io.on('connection', (socket) => {
                 timestamp: new Date().toLocaleTimeString(),
                 isSystem: true
             };
-            chatHistory[table.id].push(allConfirmedMessage);
-            io.to(table.id).emit('chatMessage', allConfirmedMessage);
+            chatModule.handleMessage(socket, table.id, allConfirmedMessage.sender === 'Администратор' ? { name: allConfirmedMessage.sender, role: 'admin' } : null, allConfirmedMessage.message);
 
             // Разделяем стол
             splitTable(table.id);
@@ -490,10 +367,10 @@ io.on('connection', (socket) => {
 
     // Обновляем обработчик отправки подарка
     socket.on('sendGift', () => {
-        const player = findPlayerBySocketId(socket.id);
+        const player = tableModule.findPlayerBySocketId(socket.id);
         if (!player || player.role !== 'Дух' || player.giftSent) return;
 
-        const table = findTableByPlayerId(socket.id);
+        const table = tableModule.findTableByPlayerId(socket.id);
         if (!table) return;
         
         // Отмечаем подарок как отправленный
@@ -508,10 +385,7 @@ io.on('connection', (socket) => {
         };
         
         // Сохраняем сообщение в историю чата
-        if (!chatHistory[table.id]) {
-            chatHistory[table.id] = [];
-        }
-        chatHistory[table.id].push(chatMessage);
+        chatModule.handleMessage(socket, table.id, chatMessage.sender === 'Администратор' ? { name: chatMessage.sender, role: 'admin' } : null, chatMessage.message);
         
         // Отправляем обновления всем игрокам за столом
         io.to(table.id).emit('tableUpdate', table);
@@ -532,15 +406,13 @@ io.on('connection', (socket) => {
                 timestamp: new Date().toLocaleTimeString(),
                 isSystem: true
             };
-            chatHistory[table.id].push(allSentMessage);
-            io.to(table.id).emit('chatMessage', allSentMessage);
+            chatModule.handleMessage(socket, table.id, allSentMessage.sender === 'Администратор' ? { name: allSentMessage.sender, role: 'admin' } : null, allSentMessage.message);
         }
     });
 
     // Добавляем обработчик переподключения игрока
     socket.on('reconnectPlayer', (savedPlayer) => {
-        // Находим стол игрока
-        const table = tables[savedPlayer.tableId];
+        const table = tableModule.getTable(savedPlayer.tableId);
         if (!table) {
             socket.emit('reconnectResponse', { 
                 success: false, 
@@ -562,9 +434,7 @@ io.on('connection', (socket) => {
         }
 
         // Удаляем старую запись игрока, если она есть
-        table.players = table.players.filter(p => 
-            !(p.name === savedPlayer.name && p.role === savedPlayer.role)
-        );
+        tableModule.removePlayer(savedPlayer.tableId, savedPlayer.id);
 
         // Создаем обновленного игрока
         const updatedPlayer = {
@@ -577,7 +447,7 @@ io.on('connection', (socket) => {
         };
 
         // Добавляем игрока обратно в таблицу
-        table.players.push(updatedPlayer);
+        tableModule.addPlayer(savedPlayer.tableId, updatedPlayer);
         
         // Присоединяем сокет к комнате стола
         socket.join(table.id);
@@ -598,9 +468,9 @@ io.on('connection', (socket) => {
 
     // Обработка отключения игрока
     socket.on('disconnect', () => {
-        const player = findPlayerBySocketId(socket.id);
+        const player = tableModule.findPlayerBySocketId(socket.id);
         if (player) {
-            const table = findTableByPlayerId(socket.id);
+            const table = tableModule.findTableByPlayerId(socket.id);
             if (table) {
                 table.players = table.players.filter(p => p.id !== socket.id);
                 io.to(table.id).emit('tableUpdate', table);
@@ -611,9 +481,9 @@ io.on('connection', (socket) => {
 
 // Обновляем функцию разделения стола
 function splitTable(tableId) {
-    const oldTable = tables[tableId];
-    const newTable1 = createNewTable(`${tableId}-1`);
-    const newTable2 = createNewTable(`${tableId}-2`);
+    const oldTable = tableModule.getTable(tableId);
+    const newTable1 = tableModule.createNewTable(`${tableId}-1`);
+    const newTable2 = tableModule.createNewTable(`${tableId}-2`);
 
     const father = oldTable.players.find(p => p.role === 'Отец');
     const sons = oldTable.players.filter(p => p.role === 'Сын');
@@ -624,59 +494,57 @@ function splitTable(tableId) {
 
     // Распределение игроков по новым столам
     // Первый стол
-    newTable1.players.push({ 
+    tableModule.addPlayer(newTable1.id, { 
         ...father, 
         role: 'Дед',
-        referralLinks: [] // Очищаем реферальные ссылки у нового Деда
+        referralLinks: []
     });
 
-    newTable1.players.push({ 
+    tableModule.addPlayer(newTable1.id, { 
         ...sons[0], 
         role: 'Отец',
-        referralLinks: [] // Очищаем реферальные ссылки у нового Отца
+        referralLinks: []
     });
     
     // Духи становятся Сыновьями на первом столе
     spirits.slice(0, 2).forEach(spirit => {
-        newTable1.players.push({ 
+        tableModule.addPlayer(newTable1.id, { 
             ...spirit, 
             role: 'Сын', 
             giftSent: false,
-            referralLinks: [], // Очищаем старые реферальные ссылки
-            canGenerateReferrals: true // Флаг для генерации новых реферальных ссылок
+            referralLinks: [],
+            canGenerateReferrals: true
         });
     });
 
     // Второй стол
-    newTable2.players.push({ 
+    tableModule.addPlayer(newTable2.id, { 
         id: 'admin-' + Date.now(),
-        name: getRandomAdminName(),
+        name: adminModule.getRandomAdminName(),
         role: 'Дед',
         isAdmin: true,
         referralLinks: []
     });
 
-    newTable2.players.push({ 
+    tableModule.addPlayer(newTable2.id, { 
         ...sons[1], 
         role: 'Отец',
-        referralLinks: [] // Очищаем реферальные ссылки у нового Отца
+        referralLinks: []
     });
     
     // Духи становятся Сыновьями на втором столе
     spirits.slice(2, 4).forEach(spirit => {
-        newTable2.players.push({ 
+        tableModule.addPlayer(newTable2.id, { 
             ...spirit, 
             role: 'Сын', 
             giftSent: false,
-            referralLinks: [], // Очищаем старые реферальные ссылки
-            canGenerateReferrals: true // Флаг для генерации новых реферальных ссылок
+            referralLinks: [],
+            canGenerateReferrals: true
         });
     });
 
-    // Обновление списка столов
-    delete tables[tableId];
-    tables[newTable1.id] = newTable1;
-    tables[newTable2.id] = newTable2;
+    // Удаляем старый стол
+    tableModule.removeTable(tableId);
 
     // Перемещение игроков на новые столы
     newTable1.players.forEach(player => {
@@ -727,22 +595,11 @@ function splitTable(tableId) {
     });
 
     // Создаем записи в истории чата для новых столов
-    chatHistory[newTable1.id] = [{
-        sender: 'Система',
-        message: 'Стол создан после разделения',
-        timestamp: new Date().toLocaleTimeString(),
-        isSystem: true
-    }];
-    
-    chatHistory[newTable2.id] = [{
-        sender: 'Система',
-        message: 'Стол создан после разделения',
-        timestamp: new Date().toLocaleTimeString(),
-        isSystem: true
-    }];
+    chatModule.handleMessage(null, newTable1.id, { name: 'Система', role: 'admin', message: 'Стол создан после разделения', timestamp: new Date().toLocaleTimeString(), isSystem: true });
+    chatModule.handleMessage(null, newTable2.id, { name: 'Система', role: 'admin', message: 'Стол создан после разделения', timestamp: new Date().toLocaleTimeString(), isSystem: true });
     
     // Удаляем историю старого стола
-    delete chatHistory[tableId];
+    chatModule.handleMessage(null, tableId, null, null);
 
     // Увеличиваем счетчик закрытых столов
     gameStats.closedTables++;
@@ -752,75 +609,30 @@ function splitTable(tableId) {
         .filter(socket => socket.isAdmin);
     
     adminSockets.forEach(socket => {
-        socket.emit('adminStatsUpdate', getGameStats());
+        socket.emit('adminStatsUpdate', tableModule.getGameStats());
     });
 }
 
-// Обновляем функцию создания стола
-function createNewTable(id) {
-    chatHistory[id] = []; // Инициализируем историю чата для нового стола
-    return {
-        id,
-        players: [],
-        status: 'waiting',
-        maxPlayers: 8
-    };
-}
-
-function generateUniqueReferral() {
-    return 'ref-' + Math.random().toString(36).substring(2, 15);
-}
-
-function findPlayerBySocketId(socketId) {
-    for (const tableId in tables) {
-        const player = tables[tableId].players.find(p => p.id === socketId);
-        if (player) return player;
-    }
-    return null;
-}
-
-function findTableByPlayerId(socketId) {
-    return Object.values(tables).find(table => 
-        table.players.some(player => player.id === socketId)
-    );
-}
-
 function clearOldReferrals(tableId) {
-    const table = tables[tableId];
+    const table = tableModule.getTable(tableId);
     if (!table) return;
 
     // Полностью очищаем все реферальные ссылки, связанные с этим столом
     const playerIds = table.players.map(p => p.id);
-    for (const [code, info] of referralLinks.entries()) {
+    for (const [code, info] of referralModule.referralLinks.entries()) {
         if (playerIds.includes(info.sonId)) {
-            referralLinks.delete(code);
+            referralModule.referralLinks.delete(code);
         }
     }
-}
-
-// Добавляем новую функцию для поиска стола по реферальной ссылке
-function findTableIdByReferral(referral) {
-    if (!referral) return null;
-    
-    const referralInfo = referralLinks.get(referral);
-    if (!referralInfo) return null;
-
-    // Ищем стол, где находится Сын, создавший ссылку
-    for (const [tableId, table] of Object.entries(tables)) {
-        if (table.players.some(p => p.id === referralInfo.sonId)) {
-            return tableId;
-        }
-    }
-    return null;
 }
 
 // Функция получения статистики игры
 function getGameStats() {
     return {
-        activeTables: Object.keys(tables).length,
+        activeTables: Object.keys(tableModule.getAllTables()).length,
         closedTables: gameStats.closedTables,
         totalPlayers: gameStats.totalRegisteredPlayers.size,
-        activePlayers: Object.values(tables).reduce((sum, table) => sum + table.players.length, 0)
+        activePlayers: Object.values(tableModule.getAllTables()).reduce((sum, table) => sum + table.players.length, 0)
     };
 }
 
@@ -829,25 +641,12 @@ function sendAdminUpdates() {
     const adminSockets = Array.from(io.sockets.sockets.values())
         .filter(socket => socket.isAdmin);
     
-    const tablesInfo = Object.entries(tables).map(([id, table]) => ({
-        id,
-        playersCount: table.players.length,
-        status: table.status,
-        hasAdminGrandfather: table.players.some(p => p.role === 'Дед' && p.isAdmin),
-        players: table.players.map(p => ({
-            id: p.id,
-            name: p.name,
-            role: p.role,
-            isAdmin: p.isAdmin,
-            giftSent: p.giftSent,
-            giftConfirmed: p.giftConfirmed
-        }))
-    }));
+    const tablesInfo = tableModule.getTablesInfo();
 
     adminSockets.forEach(socket => {
         socket.emit('adminTablesUpdate', tablesInfo);
         if (socket.currentAdminTable) {
-            const currentTable = tables[socket.currentAdminTable];
+            const currentTable = tableModule.getTable(socket.currentAdminTable);
             if (currentTable) {
                 socket.emit('adminTableJoined', {
                     table: {
@@ -856,7 +655,7 @@ function sendAdminUpdates() {
                         status: currentTable.status,
                         hasAdminGrandfather: currentTable.players.some(p => p.role === 'Дед' && p.isAdmin)
                     },
-                    chatHistory: chatHistory[currentTable.id] || []
+                    chatHistory: chatModule.getTableHistory(currentTable.id)
                 });
             }
         }
