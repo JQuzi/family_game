@@ -1,0 +1,86 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 20px;
+}
+input, button {
+    margin: 10px;
+    padding: 5px;
+}
+#game-container {
+    margin-top: 20px;
+}
+
+.player-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+}
+
+.player-card.active {
+    border-color: #28a745;
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.2);
+}
+
+.player-card.gift-sent {
+    background-color: #d4edda;
+    border-color: #28a745;
+}
+
+.player-placeholder {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.player-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.actions {
+    margin-top: 20px;
+}
+
+.actions button {
+    margin: 0 5px;
+}
+
+#referralLink {
+    word-break: break-all;
+}
+
+/* Анимация для новых игроков */
+@keyframes playerJoin {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.player-join {
+    animation: playerJoin 0.5s ease-out;
+}
+
+/* Анимация для подарка */
+@keyframes giftSent {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.gift-animation {
+    animation: giftSent 0.5s ease-out;
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Семейная Игра</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Форма входа -->
+        <div id="loginForm" class="card mt-5">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Вход в игру</h2>
+                <div class="mb-3">
+                    <label for="nameInput" class="form-label">Ваше имя</label>
+                    <input type="text" class="form-control" id="nameInput" required>
+                </div>
+                <div class="mb-3">
+                    <label for="referralInput" class="form-label">Реферальная ссылка (если есть)</label>
+                    <input type="text" class="form-control" id="referralInput">
+                </div>
+                <button onclick="login()" class="btn btn-primary w-100 mb-3">Войти</button>
+                <div class="text-center">
+                    <a href="#" onclick="toggleLoginForm('admin'); return false;" class="text-muted">Войти как администратор</a>
+                </div>
+                <div id="loginMessage" class="alert mt-3" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Форма входа для админа -->
+        <div id="adminLoginForm" class="card mt-5" style="display: none;">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Вход для администратора</h2>
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="adminLogin" placeholder="Логин">
+                </div>
+                <div class="mb-3">
+                    <input type="password" class="form-control" id="adminPassword" placeholder="Пароль">
+                </div>
+                <button onclick="adminLogin()" class="btn btn-primary w-100 mb-3">Войти</button>
+                <div class="text-center">
+                    <a href="#" onclick="toggleLoginForm('user'); return false;" class="text-muted">Войти как игрок</a>
+                </div>
+                <div id="adminMessage" class="alert mt-3" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Игровой стол -->
+        <div id="gameTable" class="card mt-5" style="display: none;">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Игровой стол</h2>
+                
+                <!-- Информация о столе -->
+                <div class="table-info mb-4">
+                    <h3>Участники стола</h3>
+                    <div class="row">
+                        <!-- Дед -->
+                        <div class="col-12 text-center mb-3">
+                            <div id="grandfather" class="player-card">
+                                <h4>Дед</h4>
+                                <div class="player-placeholder">Ожидание...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Отец -->
+                        <div class="col-12 text-center mb-3">
+                            <div id="father" class="player-card">
+                                <h4>Отец</h4>
+                                <div class="player-placeholder">Ожидание...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Сыновья -->
+                        <div class="col-12 text-center mb-3">
+                            <div class="row justify-content-center">
+                                <div class="col-md-6">
+                                    <div id="son1" class="player-card">
+                                        <h4>Сын 1</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div id="son2" class="player-card">
+                                        <h4>Сын 2</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Духи -->
+                        <div class="col-12 text-center">
+                            <div class="row justify-content-center">
+                                <div class="col-md-3">
+                                    <div id="spirit1" class="player-card">
+                                        <h4>Дух 1</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div id="spirit2" class="player-card">
+                                        <h4>Дух 2</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div id="spirit3" class="player-card">
+                                        <h4>Дух 3</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div id="spirit4" class="player-card">
+                                        <h4>Дух 4</h4>
+                                        <div class="player-placeholder">Ожидание...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="actions text-center">
+                    <button id="giftButton" onclick="sendGift()" class="btn btn-success" style="display: none;">
+                        Подарить подарок
+                    </button>
+                    <button id="referralButton" onclick="generateReferral()" class="btn btn-info" style="display: none;">
+                        Получить реферальную ссылку
+                    </button>
+                </div>
+
+                <!-- Сообщения -->
+                <div id="gameMessage" class="alert mt-3" style="display: none;"></div>
+                <div id="referralLink" class="alert alert-info mt-3" style="display: none;"></div>
+
+                <!-- Чат -->
+                <div class="chat-container mt-4">
+                    <h3>Чат стола</h3>
+                    <div id="chatMessages" class="chat-messages mb-3">
+                        <!-- Сообщения чата будут добавляться здесь -->
+                    </div>
+                    <div class="chat-input">
+                        <div class="input-group">
+                            <input type="text" id="chatInput" class="form-control" placeholder="Введите сообщение...">
+                            <button class="btn btn-primary" onclick="sendChatMessage()">Отправить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Админ-панель -->
+    <div id="adminPanel" class="container-fluid" style="display: none;">
+        <h2>Панель администратора</h2>
+        
+        <!-- Кнопка создания первого стола -->
+        <div class="mb-3">
+            <button class="btn btn-primary" onclick="socket.emit('createFirstTable')">
+                Создать первый стол и стать Дедом
+            </button>
+        </div>
+
+        <div class="row">
+            <!-- Статистика и список столов -->
+            <div class="col-md-4">
+                <div id="adminStats"></div>
+                <div id="adminTables"></div>
+            </div>
+            
+            <!-- Просмотр стола -->
+            <div class="col-md-8">
+                <div id="adminTableView" class="admin-table-view">
+                    <div class="admin-chat">
+                        <div id="adminChatMessages"></div>
+                        <div id="adminMessageControls">
+                            <!-- Кнопки для отправки сообщений будут добавлены через JavaScript -->
+                        </div>
+                        <textarea id="adminChatInput" class="form-control" rows="2" placeholder="Введите сообщение..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

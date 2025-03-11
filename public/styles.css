@@ -1,0 +1,210 @@
+/* Общие стили для админ-панели */
+#adminPanel {
+    display: none;
+    padding: 20px;
+}
+
+/* Стили для игрового стола */
+.player-card {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+.player-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.player-card h4 {
+    color: #495057;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+}
+
+.player-card .player-name {
+    font-weight: bold;
+    color: #0d6efd;
+    margin-bottom: 5px;
+}
+
+.player-card .player-placeholder {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.player-card.active {
+    border-color: #0d6efd;
+    background-color: #f8f9fa;
+}
+
+.player-card .badge {
+    margin-top: 5px;
+}
+
+.player-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+}
+
+/* Стили для чата */
+.chat-messages {
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+}
+
+.chat-message {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: white;
+}
+
+.chat-message .sender {
+    font-weight: bold;
+    color: #0d6efd;
+}
+
+.chat-message .role {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.chat-message .timestamp {
+    color: #6c757d;
+    font-size: 0.75rem;
+    float: right;
+}
+
+.chat-message.system-message {
+    background-color: #e2e3e5;
+    border-left: 4px solid #0d6efd;
+}
+
+/* Стили для админского чата */
+#adminChatMessages {
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    margin-bottom: 1rem;
+}
+
+.admin-chat {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid #dee2e6;
+}
+
+.admin-message .admin-badge {
+    background-color: yellow;
+    padding: 2px 5px;
+    border-radius: 3px;
+    margin-left: 5px;
+    font-weight: bold;
+}
+
+.admin-table-view {
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 15px;
+    background-color: white;
+}
+
+.admin-chat .btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+#adminChatInput {
+    resize: none;
+    margin-bottom: 10px;
+}
+
+/* Стили для списка столов */
+.table-card {
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.table-card.active {
+    border-color: #0d6efd;
+}
+
+/* Стили для статистики */
+.stats-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.stats-item:last-child {
+    border-bottom: none;
+}
+
+.stats-label {
+    font-weight: bold;
+    color: #495057;
+}
+
+.stats-value {
+    color: #0d6efd;
+}
+
+/* Стили для игроков */
+.player-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Стили для кнопок действий */
+.admin-actions {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #dee2e6;
+}
+
+.admin-badge {
+    background-color: #ffc107;
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    margin-left: 8px;
+}
+
+.gift-sent {
+    border-color: #ffc107;
+}
+
+.gift-confirmed {
+    border-color: #28a745;
+}
+
+.badge.bg-warning {
+    color: #000;
+} 
